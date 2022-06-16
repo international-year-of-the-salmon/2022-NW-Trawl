@@ -2,7 +2,7 @@
 
 🙋 Welcome to the repository for the Trawl data from the FV Northwest Explorer collected in 2022 as part of the International Year of the Salmon High Seas Expedition.
 
-🤖 See the metadata record for this dataset here: 
+🤖 See the metadata record for this dataset here: https://doi.org/10.21966/shnm-s480
 
 🐟 The repository is structured as follows: 
   * `original_data` contains processed data files that have been sent to the IYS Data Scientists that have not been formatted to the IYS Data Template.
@@ -15,4 +15,4 @@
 
 ## How to Contribute 🚢 
 
-To contribute to the code, please fork this repository, make your suggested modifications and generate a pull request (PR). For any issues related to the code, please create an issue in this repository. Finally, for any questions related to the data, please contact the data provider as listed in the [metadata record]() in the IYS Data Catalogue.
+To contribute to the code, please fork this repository, make your suggested modifications and generate a pull request (PR). For any issues related to the code, please create an issue in this repository. Finally, for any questions related to the data, please contact the data provider as listed in the [metadata record](https://doi.org/10.21966/shnm-s480) in the IYS Data Catalogue.
