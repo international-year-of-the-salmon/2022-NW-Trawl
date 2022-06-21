@@ -15,10 +15,12 @@ library(obistools)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r data download, include=FALSE}
-download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data.xlsx"), quiet = TRUE, mode = "wb")
+When downloading the file from the GitHub repo, make sure that you select the correct version.
 
-event <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Sampling_Event_Info")
+```{r data download, include=FALSE}
+download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data_V1.xlsx"), quiet = TRUE, mode = "wb")
+
+event <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_V1.xlsx", sheet = "Sampling_Event_Info")
 ```
 
 Create Event Core:
@@ -102,7 +104,7 @@ write_csv(event_trawl, here("standardized_data", "event_trawl.csv"))
 Next, create the occurrence extension for the overall catch: 
 
 ```{r occurrence overall catch, eval = FALSE}
-occurrence_allCatch <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Catch_Info")
+occurrence_allCatch <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_v1.xlsx", sheet = "Catch_Info")
 
 occurrence_allCatch$`Station Event ID` <- str_replace(occurrence_allCatch$`Station Event ID`, "NW2201", "IYS2022")
 occurrence_allCatch$`Catch ID` <- str_replace(occurrence_allCatch$`Catch ID`, "NW2201", "IYS2022")
@@ -140,7 +142,7 @@ occurrence_allCatch_id <- occurrence_allCatch_id %>% filter(!AphiaID %in% "10779
 nw_occurrence_all <- left_join(occurrence_allCatch_id, occurrence_allCatch, by = "scientificname")
 
 # Omit biomass data from the occurrence extension:
-nw_occurrence_all <- nw_occurrence_all %>%
+nw_occurrence <- nw_occurrence_all %>%
   mutate(specificEpithet = stringr::word(scientificname, 2)) %>%
   select(eventID = `Station Event ID`, occurrenceID = `Catch ID`, 
          scientificName = scientificname,
@@ -161,7 +163,7 @@ write_csv(nw_occurrence_all, here("standardized_data", "occurrence_trawl_all.csv
 Next, create the occurrence extension for the specimen catch: 
 
 ```{r occurrence overall catch, eval = FALSE}
-occurrence_specimen <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Specimen_Info")
+occurrence_specimen <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_v1.xlsx", sheet = "Specimen_Info")
 
 occurrence_specimen$`Station Event ID` <- str_replace(occurrence_specimen$`Station Event ID`, "NW2201", "IYS2022")
 occurrence_specimen$`Catch ID` <- str_replace(occurrence_specimen$`Catch ID`, "NW2201", "IYS2022")
@@ -198,7 +200,7 @@ occurrence_specimen_id <- occurrence_specimen_id %>% filter(!AphiaID %in% "10779
 nw_occurrence_specimen <- left_join(occurrence_specimen_id, occurrence_specimen, by = "scientificname")
 
 # Omit biomass data from the occurrence extension:
-nw_occurrence_specimen <- nw_occurrence_specimen %>%
+nw_occ_specimen <- nw_occurrence_specimen %>%
   mutate(specificEpithet = stringr::word(scientificname, 2)) %>%
   select(eventID = `Station Event ID`, occurrenceID = `Specimen ID`, 
          scientificName = scientificname,
@@ -213,7 +215,7 @@ nw_occurrence_specimen <- nw_occurrence_specimen %>%
          occurrenceStatus = "present")
 
 # Save locally:
-write_csv(nw_occurrence_specimen, here("standardized_data", "occurrence_trawl_specimen.csv"))
+write_csv(nw_occ_specimen, here("standardized_data", "occurrence_trawl_specimen.csv"))
 ```
 
 Combine both occurrence extensions into a final data table:
@@ -233,12 +235,115 @@ NW2022_occ <- as.data.frame(NW2022_occ)
 # Check if occurrenceIDs are all unique - answer should be TRUE:
 length(unique(NW2022_occ$occurrenceID)) == nrow(NW2022_occ)
 # Save the occurrence Core locally and in Google Drive:
-write_csv(trawl2020_Occurrence_ext, here("Trawl", "2020", "tidy_data", "trawl2020_occ_final.csv"))
-```
+write_csv(NW2022_occ, here("standardized_data", "NW2022_occ.csv"))
 ```
 
 Create resourceRelationship extension: 
 
 ```{r resourceRelationship, eval = FALSE}
+NW2022_resourceRelationship <- NW2022_occ %>%
+  select(eventID, occurrenceID, scientificName, individualCount)
+NW2022_resourceRelationship$individualCount <- as.numeric(NW2022_resourceRelationship$individualCount)
+  
+NW2022_resourceRelationship <- NW2022_resourceRelationship %>%
+  mutate(resourceID = ifelse(is.na(individualCount), NW2022_occ$occurrenceID, NA)) %>%
+  group_by(eventID, scientificName) %>%
+  filter(n() != 1) %>%
+  ungroup()
 
+NW2022_resourceRelationship <- NW2022_resourceRelationship %>%
+  mutate(relatedResourceID = ifelse(is.na(individualCount), NA, NW2022_occ$occurrenceID)) %>%
+  mutate(relationshipOfResource = ifelse(!is.na(resourceID), "is a subset of", NA)) %>%
+  dplyr::arrange(eventID, scientificName) %>%
+  fill(relatedResourceID) %>%
+  filter(!is.na(resourceID))
+
+order <- stringr::str_sort(NW2022_resourceRelationship$resourceID, numeric = TRUE)
+NW2022_resourceRelationship <- NW2022_resourceRelationship[match(order, NW2022_resourceRelationship$resourceID),]
+NW2022_resourceRelationship <- NW2022_resourceRelationship %>%
+  mutate(resourceRelationshipID = paste(relatedResourceID, "rr", sep = ":"),
+         ID = sprintf("%03d", row_number()),
+         resourceRelationshipID = paste(resourceRelationshipID, ID, sep = ":")) %>%
+  select(eventID, resourceRelationshipID, resourceID, relationshipOfResource, relatedResourceID)
+
+write_csv(NW2022_resourceRelationship, here("standardized_data", "NW2022_resourceRelationship.csv"))
 ```
+
+Create eMOF extension data table:
+
+```{r eMOF, eval = FALSE}
+NW2022_trawl_allCatch_eMOF <- nw_occurrence_all %>%
+  select(eventID = `Station Event ID`,
+         occurrenceID = `Catch ID`,
+         individualCount = Catch_Count,
+         Catch_Weight,
+         Lifestage) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = c(individualCount:Lifestage),
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(measurementMethod = ifelse(measurementType == "individualCount", "Total", NA))
+
+NW2022_trawl_allCatch_eMOF <- NW2022_trawl_allCatch_eMOF %>%
+  mutate(measurementID = paste0(occurrenceID, measurementType, sep = ":"),
+         measurementTypeID = case_when(
+           measurementType == "individualCount" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OCOUNT01/",
+           measurementType == "Catch_Weight" ~ "http://vocab.nerc.ac.uk/collection/S06/current/S0600088/",
+           measurementType == "Lifestage" ~ " "),
+         measurementUnit = case_when(
+           measurementType == "individualCount" ~ "individuals",
+           measurementType == "Catch_Weight" ~ "kilogram"),
+         measurementUnitID = case_when(
+           measurementUnit == "kilogram" ~ "http://vocab.nerc.ac.uk/collection/P06/current/KGXX/",
+           measurementUnit == "individuals" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/"),
+         measurementValueID = case_when(
+           measurementValue == "None" ~ " ",
+           measurementValue == "Immature" ~ " ",
+           measurementValue == "Larval" ~ " ",
+           measurementValue == "Age 1+" ~ " ")) %>%
+  select(eventID, occurrenceID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
+         measurementUnit, measurementUnitID, measurementMethod)
+
+# And for the individual specimen data:
+NW2022_ind_eMOF <- nw_occurrence_specimen %>%
+  select(eventID = `Station Event ID`,
+         occurrenceID = `Specimen ID`, 
+         Lifestage, Length, Weight, Sex) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = Lifestage:Sex,
+               names_to = "measurementType", 
+               values_to = "measurementValue") %>%
+  mutate(measurementID = paste0(occurrenceID, measurementType, sep = ":"),
+         measurementTypeID = case_when(
+           measurementType == "Length" ~ " ",
+           measurementType == "Weight" ~ " "),
+         measurementUnit = case_when(
+           measurementType == "Length" ~ "centimeters",
+           measurementType == "Weight" ~ "kilograms"),
+         measurementUnitID = case_when(
+           measurementUnit == "kilograms" ~ " ",
+           measurementUnit == "centimeters" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULCM/"),
+         measurementValueID = case_when(
+           measurementValue == "Unsexed" ~ " ",
+           measurementValue == "Female" ~ " ",
+           measurementValue == "Male" ~ " ",
+           measurementValue == "None" ~ " ",
+           measurementValue == "Immature" ~ " ",
+           measurementValue == "Age 1+" ~ " ")) %>%
+  select(eventID, occurrenceID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
+         measurementUnit, measurementUnitID)
+```
+
+Combine the two extended measurementOrFact extensions into a single eMOF extension, and save locally and in GoogleDrive:
+
+``` {r}
+NW2022_eMOF <- dplyr::bind_rows(NW2022_trawl_allCatch_eMOF, NW2022_ind_eMOF)
+
+# Remove NA and replace with empty cells:
+NW2022_eMOF <- sapply(NW2022_eMOF, as.character)
+NW2022_eMOF[is.na(NW2022_eMOF)] <- ""
+NW2022_eMOF <- as.data.frame(NW2022_eMOF)
+
+write_csv(NW2022_eMOF, here("standardized_data", "NW2022_eMOF.csv"))
+```
+
