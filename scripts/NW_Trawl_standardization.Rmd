@@ -10,20 +10,235 @@ library(tidyverse)
 library(lubridate)
 library(readxl)
 library(here)
+library(lubridate)
+library(obistools)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r data download, include=FALSE}
-download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here("IYS_data_template", "IYS2022_NW_Data.xlsx"))
-event <- read_excel("./IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Sampling_Event_Info")
+download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data.xlsx"), quiet = TRUE, mode = "wb")
+
+event <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Sampling_Event_Info")
 ```
-event <- read_excel("IYS_data_template/IYS2022_TINRO.xlsx", 
-    sheet = "4. SAMPLING EVENT INFO") %>% 
-  filter(Event_Type == "CTD") %>% 
-  mutate(Time_Start = str_sub(Time_Start, -8, -1), # Remove leading date
-         Time_End = str_sub(Time_End, -8, -1),
-         Date_Time = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
-           paste0(Year, "-", Month, "-", Day)), " ", Time_Start), tz="UTC")), "Z"),
-        # convert numeric fractional of day to minutes
-         Sampling_Duration_Minutes = round(Sampling_Duration_Minutes * 1440, 0)) %>%
-  select(-Day_Night, -Tow_speed_kilometers_per_hour, -Tow_distance_nautical_miles, -Swell_height_Meters, -Weather_description, -Comments) 
+
+Create Event Core:
+
+```{r event, include = FALSE}
+event <- event %>% filter(Event_Type == "CanTrawl") %>%
+  mutate(Time_Start = as.POSIXct(Time_Start, format = "%H:%M:%S"),
+         Time_End = as.POSIXct(Time_End, format = "%H:%M:%S")) %>%
+  mutate(Time_Start = strftime(Time_Start, format = "%H:%M:%S"),
+         Time_End = strftime(Time_End, format = "%H:%M:%S")) %>%
+  mutate(eventDate_start = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
+    paste0(Year, "-", Month, "-", Day)), " ", Time_Start), tz ="UTC")), "Z"),
+         eventDate_finish = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
+    paste0(Year, "-", Month, "-", Day)), " ", Time_End), tz = "UTC")), "Z"))
+
+# Quick manual QAQC to ensure that there's no sampling event occurring over 2 days:
+time_QAQC <- event %>% select(Station, Year, Month, Day, Time_Start, Time_End, eventDate_start, eventDate_finish)
+
+# For Station 1, sampling occurred across midnight, and so the time_start and time_end are on different days. Change dates accordingly:
+station1 <- event %>% filter(Station == 1) %>%
+  mutate(eventDate_finish = as.Date(eventDate_finish) + 1) %>%
+  mutate(eventDate_finish = paste0(eventDate_finish, "T", Time_End, "Z"))
+
+nw_event <- subset(event, Station != 1)
+event <- rbind(nw_event, station1) %>% arrange(Station)
+
+# Create final eventDate and QC
+event <- event %>%
+  mutate(eventDate = paste(eventDate_start, eventDate_finish, sep = "/"))
+obistools::check_eventdate(event)
+```
+
+Create function to determine polygon coordinates required for the metadata:
+
+```{r polygon coordinates, include = FALSE}
+polygon_coords <- function(event){
+  event <- event %>% select(Latitude_Start_DecDeg, Longitude_Start_DecDeg) %>% 
+    drop_na(Latitude_Start_DecDeg, Longitude_Start_DecDeg) 
+  ch <- chull(event)
+  coords <- event[c(ch, ch[1]), ]
+  coords <- paste(coords$Latitude_Start_DecDeg, coords$Longitude_Start_DecDeg, sep = ",", collapse = " ")
+  coords
+}
+```
+
+Create Event Core:
+
+```{r event_core, include = FALSE}
+event$Year <- as.numeric(format(as.Date(event$eventDate), "%Y"))
+event$Month <- as.numeric(format(as.Date(event$eventDate), "%m"))
+event$Day <- as.numeric(format(as.Date(event$eventDate), "%d"))
+
+event_coordinates <- event %>%
+  select(eventID = Station_Event_ID,
+         Longitude_Start_DecDeg, Latitude_Start_DecDeg,
+         Longitude_End_DecDeg, Latitude_End_DecDeg) %>%
+  distinct(eventID, .keep_all = TRUE) %>%
+    mutate(footprintWKT = paste("LINESTRING (", Longitude_Start_DecDeg, Latitude_Start_DecDeg, ",", 
+                              Longitude_End_DecDeg, Latitude_End_DecDeg, ")")) 
+
+event_linestring <- obistools::calculate_centroid(event_coordinates$footprintWKT)
+event_linestring <- cbind(event_coordinates, event_linestring) %>%
+  select(eventID, footprintWKT, decimalLatitude, decimalLongitude, coordinateUncertaintyInMeters)
+
+event_trawl <- event %>%
+  select(eventID = Station_Event_ID,
+         eventDate,
+         Year, Month, Day,
+         minimumDepthInMeters = Minimum_Sampling_Depth,
+         maximumDepthInMeters = Maximum_Sampling_Depth) %>%
+  left_join(event_linestring, by = "eventID") %>%
+  distinct(eventID, .keep_all = TRUE) %>%
+  mutate(geodeticDatum = "WGS84")
+
+event_trawl$eventID <- str_replace_all(event_trawl$eventID, "NW2201", "IYS2022")
+
+# Save locally:
+write_csv(event_trawl, here("standardized_data", "event_trawl.csv"))
+```
+
+Next, create the occurrence extension for the overall catch: 
+
+```{r occurrence overall catch, eval = FALSE}
+occurrence_allCatch <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Catch_Info")
+
+occurrence_allCatch$`Station Event ID` <- str_replace(occurrence_allCatch$`Station Event ID`, "NW2201", "IYS2022")
+occurrence_allCatch$`Catch ID` <- str_replace(occurrence_allCatch$`Catch ID`, "NW2201", "IYS2022")
+
+occurrence_allCatch <- occurrence_allCatch %>%
+  mutate(identificationQualifier = ifelse(grepl("sp.", occurrence_allCatch$Scientific_Name), "sp. indet", ""))
+occurrence_allCatch$Scientific_Name <- gsub("\\b sp.", "", occurrence_allCatch$Scientific_Name)
+occurrence_allCatch <- occurrence_allCatch %>% rename(scientificname = Scientific_Name)
+unique_spp <- unique(occurrence_allCatch$scientificname) %>% as.data.frame()
+colnames(unique_spp) <- "scientificname"
+
+# Assign WoRMS LSID to the unique species:
+worms_id <- worrms::wm_records_names(unique(occurrence_allCatch$scientificname), marine_only = FALSE) %>% dplyr::bind_rows()
+
+# Find out which species are not found in the WoRMS database:
+worms_occ <- left_join(unique_spp, worms_id, by = "scientificname") %>% 
+  filter(is.na(AphiaID)) %>% distinct(scientificname)
+
+# Change the taxa names accordingly: 
+occurrence_allCatch$scientificname <- str_replace(occurrence_allCatch$scientificname, " \\s*\\([^\\)]+\\)", "") # removes class
+occurrence_allCatch$scientificname <- gsub("Phacellophora camtchatica", 
+                                           "Phacellophora camtschatica", occurrence_allCatch$scientificname)
+occurrence_allCatch$scientificname <- gsub("Glyptocephalus zachiris",
+                                           "Glyptocephalus zachirus", occurrence_allCatch$scientificname)
+occurrence_allCatch$scientificname <- gsub("Argropelecus sladeni",
+                                           "Argyropelecus sladeni", occurrence_allCatch$scientificname)
+
+# So now we can run worrms::wm_records_names again, and there should be no NA in the AphiaID column. Be sure to inspect the result as sometimes multiple AphiaIDs are generated for the same taxa.    
+occurrence_allCatch_id <- worrms::wm_records_names(unique(occurrence_allCatch$scientificname), marine_only = FALSE) %>% bind_rows() 
+
+# Omit certain AphiaIDs that do not apply:
+occurrence_allCatch_id <- occurrence_allCatch_id %>% filter(!AphiaID %in% "1077913")
+
+# Now that all unique entries have a WoRMS ID, connect this to the original data frame:
+nw_occurrence_all <- left_join(occurrence_allCatch_id, occurrence_allCatch, by = "scientificname")
+
+# Omit biomass data from the occurrence extension:
+nw_occurrence_all <- nw_occurrence_all %>%
+  mutate(specificEpithet = stringr::word(scientificname, 2)) %>%
+  select(eventID = `Station Event ID`, occurrenceID = `Catch ID`, 
+         scientificName = scientificname,
+         scientificNameID = `lsid`, 
+         scientificNameAuthorship = authority,
+         taxonomicStatus = status,
+         taxonRank = rank, 
+         lifeStage = Lifestage,
+         vernacularName = Species_Recorded, 
+         individualCount = Catch_Count, identificationQualifier, kingdom, phylum, class, order, family, genus, specificEpithet) %>% distinct() %>%
+  mutate(basisOfRecord = "HumanObservation",
+         occurrenceStatus = "present")
+
+# Save locally:
+write_csv(nw_occurrence_all, here("standardized_data", "occurrence_trawl_all.csv"))
+```
+
+Next, create the occurrence extension for the specimen catch: 
+
+```{r occurrence overall catch, eval = FALSE}
+occurrence_specimen <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Specimen_Info")
+
+occurrence_specimen$`Station Event ID` <- str_replace(occurrence_specimen$`Station Event ID`, "NW2201", "IYS2022")
+occurrence_specimen$`Catch ID` <- str_replace(occurrence_specimen$`Catch ID`, "NW2201", "IYS2022")
+occurrence_specimen$`Specimen ID` <- str_replace(occurrence_specimen$`Specimen ID`, "NW2201", "IYS2022")
+
+occurrence_specimen <- occurrence_specimen %>%
+  mutate(identificationQualifier = ifelse(grepl("sp.", occurrence_specimen$Scientific_Name), "sp. indet", ""))
+occurrence_specimen$Scientific_Name <- gsub("\\b sp.", "", occurrence_specimen$Scientific_Name)
+
+occurrence_specimen <- occurrence_specimen %>% rename(scientificname = Scientific_Name)
+unique_spp_specimen <- unique(occurrence_specimen$scientificname) %>% as.data.frame()
+colnames(unique_spp_specimen) <- "scientificname"
+
+# Assign WoRMS LSID to the unique species:
+worms_id <- worrms::wm_records_names(unique(occurrence_specimen$scientificname), marine_only = FALSE) %>% dplyr::bind_rows()
+
+# Find out which species are not found in the WoRMS database:
+worms_occ <- left_join(unique_spp_specimen, worms_id, by = "scientificname") %>% 
+  filter(is.na(AphiaID)) %>% distinct(scientificname)
+
+# Change the taxa names accordingly: 
+occurrence_specimen$scientificname <- gsub("Phacellophora camtchatica", 
+                                           "Phacellophora camtschatica", occurrence_specimen$scientificname)
+occurrence_specimen$scientificname <- gsub("Argropelecus sladeni",
+                                           "Argyropelecus sladeni", occurrence_specimen$scientificname)
+
+# So now we can run worrms::wm_records_names again, and there should be no NA in the AphiaID column. Be sure to inspect the result as sometimes multiple AphiaIDs are generated for the same taxa.    
+occurrence_specimen_id <- worrms::wm_records_names(unique(occurrence_specimen$scientificname), marine_only = FALSE) %>% bind_rows() 
+
+# Omit certain AphiaIDs that do not apply:
+occurrence_specimen_id <- occurrence_specimen_id %>% filter(!AphiaID %in% "1077913")
+
+# Now that all unique entries have a WoRMS ID, connect this to the original data frame:
+nw_occurrence_specimen <- left_join(occurrence_specimen_id, occurrence_specimen, by = "scientificname")
+
+# Omit biomass data from the occurrence extension:
+nw_occurrence_specimen <- nw_occurrence_specimen %>%
+  mutate(specificEpithet = stringr::word(scientificname, 2)) %>%
+  select(eventID = `Station Event ID`, occurrenceID = `Specimen ID`, 
+         scientificName = scientificname,
+         scientificNameID = `lsid`, 
+         scientificNameAuthorship = authority,
+         taxonomicStatus = status,
+         taxonRank = rank, 
+         lifeStage = Lifestage,
+         vernacularName = Species_Recorded, 
+         identificationQualifier, kingdom, phylum, class, order, family, genus, specificEpithet) %>% distinct() %>%
+  mutate(basisOfRecord = "HumanObservation",
+         occurrenceStatus = "present")
+
+# Save locally:
+write_csv(nw_occurrence_specimen, here("standardized_data", "occurrence_trawl_specimen.csv"))
+```
+
+Combine both occurrence extensions into a final data table:
+
+```{r occurrence, eval = FALSE}
+NW2022_occ <- dplyr::bind_rows(nw_occurrence_all, nw_occurrence_specimen)
+
+# To re-order the occurrenceID, use following code:
+order <- stringr::str_sort(NW2022_occ$occurrenceID, numeric=TRUE)
+NW2022_occ <- NW2022_occ[match(order, NW2022_occ$occurrenceID),]
+
+# Remove NA and replace with empty cells:
+NW2022_occ <- sapply(NW2022_occ, as.character)
+NW2022_occ[is.na(NW2022_occ)] <- ""
+NW2022_occ <- as.data.frame(NW2022_occ)
+
+# Check if occurrenceIDs are all unique - answer should be TRUE:
+length(unique(NW2022_occ$occurrenceID)) == nrow(NW2022_occ)
+# Save the occurrence Core locally and in Google Drive:
+write_csv(trawl2020_Occurrence_ext, here("Trawl", "2020", "tidy_data", "trawl2020_occ_final.csv"))
+```
+```
+
+Create resourceRelationship extension: 
+
+```{r resourceRelationship, eval = FALSE}
+
+```
