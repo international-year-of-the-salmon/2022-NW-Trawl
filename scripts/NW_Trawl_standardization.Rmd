@@ -221,7 +221,7 @@ write_csv(nw_occ_specimen, here("standardized_data", "occurrence_trawl_specimen.
 Combine both occurrence extensions into a final data table:
 
 ```{r occurrence, eval = FALSE}
-NW2022_occ <- dplyr::bind_rows(nw_occurrence_all, nw_occurrence_specimen)
+NW2022_occ <- dplyr::bind_rows(nw_occurrence, nw_occ_specimen)
 
 # To re-order the occurrenceID, use following code:
 order <- stringr::str_sort(NW2022_occ$occurrenceID, numeric=TRUE)
@@ -261,9 +261,9 @@ NW2022_resourceRelationship <- NW2022_resourceRelationship %>%
 order <- stringr::str_sort(NW2022_resourceRelationship$resourceID, numeric = TRUE)
 NW2022_resourceRelationship <- NW2022_resourceRelationship[match(order, NW2022_resourceRelationship$resourceID),]
 NW2022_resourceRelationship <- NW2022_resourceRelationship %>%
-  mutate(resourceRelationshipID = paste(relatedResourceID, "rr", sep = ":"),
+  mutate(resourceRelationshipID = paste(relatedResourceID, "rr", sep = "-"),
          ID = sprintf("%03d", row_number()),
-         resourceRelationshipID = paste(resourceRelationshipID, ID, sep = ":")) %>%
+         resourceRelationshipID = paste(resourceRelationshipID, ID, sep = "-")) %>%
   select(eventID, resourceRelationshipID, resourceID, relationshipOfResource, relatedResourceID)
 
 write_csv(NW2022_resourceRelationship, here("standardized_data", "NW2022_resourceRelationship.csv"))
@@ -289,7 +289,7 @@ NW2022_trawl_allCatch_eMOF <- NW2022_trawl_allCatch_eMOF %>%
          measurementTypeID = case_when(
            measurementType == "individualCount" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OCOUNT01/",
            measurementType == "Catch_Weight" ~ "http://vocab.nerc.ac.uk/collection/S06/current/S0600088/",
-           measurementType == "Lifestage" ~ " "),
+           measurementType == "Lifestage" ~ "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/"),
          measurementUnit = case_when(
            measurementType == "individualCount" ~ "individuals",
            measurementType == "Catch_Weight" ~ "kilogram"),
@@ -297,10 +297,10 @@ NW2022_trawl_allCatch_eMOF <- NW2022_trawl_allCatch_eMOF %>%
            measurementUnit == "kilogram" ~ "http://vocab.nerc.ac.uk/collection/P06/current/KGXX/",
            measurementUnit == "individuals" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/"),
          measurementValueID = case_when(
-           measurementValue == "None" ~ " ",
-           measurementValue == "Immature" ~ " ",
-           measurementValue == "Larval" ~ " ",
-           measurementValue == "Age 1+" ~ " ")) %>%
+           measurementValue == "None" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1131/",
+           measurementValue == "Immature" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1171/",
+           measurementValue == "Larval" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/",
+           measurementValue == "Age 1+" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1116/")) %>%
   select(eventID, occurrenceID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
          measurementUnit, measurementUnitID, measurementMethod)
 
@@ -313,23 +313,25 @@ NW2022_ind_eMOF <- nw_occurrence_specimen %>%
   pivot_longer(cols = Lifestage:Sex,
                names_to = "measurementType", 
                values_to = "measurementValue") %>%
-  mutate(measurementID = paste0(occurrenceID, measurementType, sep = ":"),
+  mutate(measurementID = paste(occurrenceID, measurementType, sep = "-"),
          measurementTypeID = case_when(
-           measurementType == "Length" ~ " ",
-           measurementType == "Weight" ~ " "),
+           measurementType == "Lifestage" ~ "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/",
+           measurementType == "Sex" ~ "http://vocab.nerc.ac.uk/collection/P01/current/ENTSEX01/",
+           measurementType == "Length" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSINDLX/",
+           measurementType == "Weight" ~ "http://vocab.nerc.ac.uk/collection/S06/current/S0600088/"),
          measurementUnit = case_when(
            measurementType == "Length" ~ "centimeters",
            measurementType == "Weight" ~ "kilograms"),
          measurementUnitID = case_when(
-           measurementUnit == "kilograms" ~ " ",
+           measurementUnit == "kilograms" ~ "http://vocab.nerc.ac.uk/collection/P06/current/KGXX/",
            measurementUnit == "centimeters" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULCM/"),
          measurementValueID = case_when(
-           measurementValue == "Unsexed" ~ " ",
-           measurementValue == "Female" ~ " ",
-           measurementValue == "Male" ~ " ",
-           measurementValue == "None" ~ " ",
-           measurementValue == "Immature" ~ " ",
-           measurementValue == "Age 1+" ~ " ")) %>%
+           measurementValue == "Unsexed" ~ "https://vocab.nerc.ac.uk/collection/S10/current/S104/",
+           measurementValue == "Female" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S102/",
+           measurementValue == "Male" ~ "https://vocab.nerc.ac.uk/collection/S10/current/S103/",
+           measurementValue == "None" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1131/",
+           measurementValue == "Immature" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1171/",
+           measurementValue == "Age 1+" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1116/")) %>%
   select(eventID, occurrenceID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
          measurementUnit, measurementUnitID)
 ```
