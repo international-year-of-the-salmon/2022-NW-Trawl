@@ -18,9 +18,9 @@ knitr::opts_chunk$set(echo = TRUE)
 When downloading the file from the GitHub repo, make sure that you select the correct version.
 
 ```{r data download, include=FALSE}
-download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data_V1.xlsx"), quiet = TRUE, mode = "wb")
+download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data.xlsx"), quiet = TRUE, mode = "wb")
 
-event <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_V1.xlsx", sheet = "Sampling_Event_Info")
+event <- read_excel(here::here("IYS_data_template", "IYS2022_NW_Data.xlsx"), sheet = "Sampling_Event_Info")
 ```
 
 Create Event Core:
@@ -95,8 +95,6 @@ event_trawl <- event %>%
   distinct(eventID, .keep_all = TRUE) %>%
   mutate(geodeticDatum = "WGS84")
 
-event_trawl$eventID <- str_replace_all(event_trawl$eventID, "NW2201", "IYS2022")
-
 # Save locally:
 write_csv(event_trawl, here("standardized_data", "event_trawl.csv"))
 ```
@@ -104,10 +102,7 @@ write_csv(event_trawl, here("standardized_data", "event_trawl.csv"))
 Next, create the occurrence extension for the overall catch: 
 
 ```{r occurrence overall catch, eval = FALSE}
-occurrence_allCatch <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_v1.xlsx", sheet = "Catch_Info")
-
-occurrence_allCatch$`Station Event ID` <- str_replace(occurrence_allCatch$`Station Event ID`, "NW2201", "IYS2022")
-occurrence_allCatch$`Catch ID` <- str_replace(occurrence_allCatch$`Catch ID`, "NW2201", "IYS2022")
+occurrence_allCatch <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Catch_Info")
 
 occurrence_allCatch <- occurrence_allCatch %>%
   mutate(identificationQualifier = ifelse(grepl("sp.", occurrence_allCatch$Scientific_Name), "sp. indet", ""))
@@ -164,10 +159,6 @@ Next, create the occurrence extension for the specimen catch:
 
 ```{r occurrence overall catch, eval = FALSE}
 occurrence_specimen <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_v1.xlsx", sheet = "Specimen_Info")
-
-occurrence_specimen$`Station Event ID` <- str_replace(occurrence_specimen$`Station Event ID`, "NW2201", "IYS2022")
-occurrence_specimen$`Catch ID` <- str_replace(occurrence_specimen$`Catch ID`, "NW2201", "IYS2022")
-occurrence_specimen$`Specimen ID` <- str_replace(occurrence_specimen$`Specimen ID`, "NW2201", "IYS2022")
 
 occurrence_specimen <- occurrence_specimen %>%
   mutate(identificationQualifier = ifelse(grepl("sp.", occurrence_specimen$Scientific_Name), "sp. indet", ""))

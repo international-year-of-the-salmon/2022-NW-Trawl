@@ -1,5 +1,0 @@
-Changelog for 2022-NW-Trawl data
-
-Changes made from original data template to V1 (Date: 6/21/2022, mod: Tim van der Stap)
-
-1. Duplicate `Catch ID` found in the data file. Changed the Catch ID for 'Salps unident.' from NW2201-NW-2-13-CanTrawl-1 to NW2201-NW-2-13-CanTrawl-18.
