@@ -96,7 +96,7 @@ event_trawl <- event %>%
   mutate(geodeticDatum = "WGS84")
 
 # Save locally:
-write_csv(event_trawl, here("standardized_data", "event_trawl.csv"))
+write_csv(event_trawl, here("standardized_data", "NW2022_event.csv"))
 ```
 
 Next, create the occurrence extension for the overall catch: 
