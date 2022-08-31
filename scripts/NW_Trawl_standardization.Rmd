@@ -93,7 +93,9 @@ event_trawl <- event %>%
          maximumDepthInMeters = Maximum_Sampling_Depth) %>%
   left_join(event_linestring, by = "eventID") %>%
   distinct(eventID, .keep_all = TRUE) %>%
-  mutate(geodeticDatum = "WGS84")
+  mutate(geodeticDatum = "WGS84",
+         datasetID = "https://doi.org/10.21966/shnm-s480",
+         bibliographicCitation = "Murphy, J., & Dimond, A. (2022). Trawl Data from the FV Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition [Data set]. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/shnm-s480")
 
 # Save locally:
 write_csv(event_trawl, here("standardized_data", "NW2022_event.csv"))
@@ -104,6 +106,7 @@ Next, create the occurrence extension for the overall catch:
 ```{r occurrence overall catch, eval = FALSE}
 occurrence_allCatch <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Catch_Info")
 
+occurrence_allCatch$verbatimIdentification <- occurrence_allCatch$Scientific_Name
 occurrence_allCatch <- occurrence_allCatch %>%
   mutate(identificationQualifier = ifelse(grepl("sp.", occurrence_allCatch$Scientific_Name), "sp. indet", ""))
 occurrence_allCatch$Scientific_Name <- gsub("\\b sp.", "", occurrence_allCatch$Scientific_Name)
@@ -141,6 +144,7 @@ nw_occurrence <- nw_occurrence_all %>%
   mutate(specificEpithet = stringr::word(scientificname, 2)) %>%
   select(eventID = `Station Event ID`, occurrenceID = `Catch ID`, 
          scientificName = scientificname,
+         verbatimIdentification,
          scientificNameID = `lsid`, 
          scientificNameAuthorship = authority,
          taxonomicStatus = status,
@@ -158,8 +162,9 @@ write_csv(nw_occurrence_all, here("standardized_data", "occurrence_trawl_all.csv
 Next, create the occurrence extension for the specimen catch: 
 
 ```{r occurrence overall catch, eval = FALSE}
-occurrence_specimen <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data_v1.xlsx", sheet = "Specimen_Info")
+occurrence_specimen <- read_excel("C:/Users/Admin/Desktop/GitHub/2022-NW-Trawl/IYS_data_template/IYS2022_NW_Data.xlsx", sheet = "Specimen_Info")
 
+occurrence_specimen$verbatimIdentification <- occurrence_specimen$Scientific_Name
 occurrence_specimen <- occurrence_specimen %>%
   mutate(identificationQualifier = ifelse(grepl("sp.", occurrence_specimen$Scientific_Name), "sp. indet", ""))
 occurrence_specimen$Scientific_Name <- gsub("\\b sp.", "", occurrence_specimen$Scientific_Name)
@@ -195,6 +200,7 @@ nw_occ_specimen <- nw_occurrence_specimen %>%
   mutate(specificEpithet = stringr::word(scientificname, 2)) %>%
   select(eventID = `Station Event ID`, occurrenceID = `Specimen ID`, 
          scientificName = scientificname,
+         verbatimIdentification,
          scientificNameID = `lsid`, 
          scientificNameAuthorship = authority,
          taxonomicStatus = status,
