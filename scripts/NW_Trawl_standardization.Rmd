@@ -122,13 +122,10 @@ worms_occ <- left_join(unique_spp, worms_id, by = "scientificname") %>%
   filter(is.na(AphiaID)) %>% distinct(scientificname)
 
 # Change the taxa names accordingly: 
-occurrence_allCatch$scientificname <- str_replace(occurrence_allCatch$scientificname, " \\s*\\([^\\)]+\\)", "") # removes class
-occurrence_allCatch$scientificname <- gsub("Phacellophora camtchatica", 
-                                           "Phacellophora camtschatica", occurrence_allCatch$scientificname)
-occurrence_allCatch$scientificname <- gsub("Glyptocephalus zachiris",
-                                           "Glyptocephalus zachirus", occurrence_allCatch$scientificname)
-occurrence_allCatch$scientificname <- gsub("Argropelecus sladeni",
-                                           "Argyropelecus sladeni", occurrence_allCatch$scientificname)
+occurrence_allCatch$scientificname <- str_replace(occurrence_allCatch$scientificname, " \\s*\\([^\\)]+\\)", "") # removes (class) from scientificname
+occurrence_allCatch$scientificname <- gsub("Phacellophora camtchatica", "Phacellophora camtschatica", occurrence_allCatch$scientificname)
+occurrence_allCatch$scientificname <- gsub("Glyptocephalus zachiris", "Glyptocephalus zachirus", occurrence_allCatch$scientificname)
+occurrence_allCatch$scientificname <- gsub("Argropelecus sladeni", "Argyropelecus sladeni", occurrence_allCatch$scientificname)
 
 # So now we can run worrms::wm_records_names again, and there should be no NA in the AphiaID column. Be sure to inspect the result as sometimes multiple AphiaIDs are generated for the same taxa.    
 occurrence_allCatch_id <- worrms::wm_records_names(unique(occurrence_allCatch$scientificname), marine_only = FALSE) %>% bind_rows() 
@@ -181,10 +178,8 @@ worms_occ <- left_join(unique_spp_specimen, worms_id, by = "scientificname") %>%
   filter(is.na(AphiaID)) %>% distinct(scientificname)
 
 # Change the taxa names accordingly: 
-occurrence_specimen$scientificname <- gsub("Phacellophora camtchatica", 
-                                           "Phacellophora camtschatica", occurrence_specimen$scientificname)
-occurrence_specimen$scientificname <- gsub("Argropelecus sladeni",
-                                           "Argyropelecus sladeni", occurrence_specimen$scientificname)
+occurrence_specimen$scientificname <- gsub("Phacellophora camtchatica", "Phacellophora camtschatica", occurrence_specimen$scientificname)
+occurrence_specimen$scientificname <- gsub("Argropelecus sladeni", "Argyropelecus sladeni", occurrence_specimen$scientificname)
 
 # So now we can run worrms::wm_records_names again, and there should be no NA in the AphiaID column. Be sure to inspect the result as sometimes multiple AphiaIDs are generated for the same taxa.    
 occurrence_specimen_id <- worrms::wm_records_names(unique(occurrence_specimen$scientificname), marine_only = FALSE) %>% bind_rows() 
@@ -205,6 +200,7 @@ nw_occ_specimen <- nw_occurrence_specimen %>%
          scientificNameAuthorship = authority,
          taxonomicStatus = status,
          taxonRank = rank, 
+         sex = Sex,
          lifeStage = Lifestage,
          vernacularName = Species_Recorded, 
          identificationQualifier, kingdom, phylum, class, order, family, genus, specificEpithet) %>% distinct() %>%
@@ -231,6 +227,7 @@ NW2022_occ <- as.data.frame(NW2022_occ)
 
 # Check if occurrenceIDs are all unique - answer should be TRUE:
 length(unique(NW2022_occ$occurrenceID)) == nrow(NW2022_occ)
+
 # Save the occurrence Core locally and in Google Drive:
 write_csv(NW2022_occ, here("standardized_data", "NW2022_occ.csv"))
 ```
@@ -269,6 +266,42 @@ write_csv(NW2022_resourceRelationship, here("standardized_data", "NW2022_resourc
 Create eMOF extension data table:
 
 ```{r eMOF, eval = FALSE}
+# Data table for the facts related to the Research Vessel:
+NW2022_rv <- event_trawl %>%
+  select(eventID) %>%
+  mutate_all(as.character) %>%
+  mutate(measurementID = paste(eventID, "rv", sep = "-"), 
+         measurementType = "Research Vessel",
+         measurementTypeID = "http://vocab.nerc.ac.uk/collection/L06/current/31/",
+         measurementValue = "F/V Northwest Explorer",
+         measurementValueID = "https://vocab.nerc.ac.uk/collection/C17/current/33QV/",
+         measurementUnit = NA,
+         measurementUnitID = NA) %>% distinct()
+
+# Data table for the sampling effort:
+NW2022_samplingEffort <- event %>%
+  select(eventID = Station_Event_ID,
+         Sampling_Duration_Minutes,
+         `Haversine Distance`) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = Sampling_Duration_Minutes:`Haversine Distance`,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(measurementTypeID = case_when(
+           measurementType == "Sampling_Duration_Minutes" ~ "http://vocab.nerc.ac.uk/collection/P01/current/AZDRZZ01/",
+           measurementType == "Haversine Distance" ~ " "),
+         measurementUnit = case_when(
+           measurementType == "Sampling_Duration_Minutes" ~ "minutes",
+           measurementType == "Haversine Distance" ~ "kilometers"),
+         measurementUnitID = case_when(
+           measurementUnit == "minutes" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UMIN/",
+           measurementUnit == "kilometers" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULKM/"),
+         measurementValueID = NA,
+         measurementID = paste(eventID, measurementType, sep = "-")) %>%
+  select(eventID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
+         measurementUnit, measurementUnitID)
+
+# Data table for the overall catch:
 NW2022_trawl_allCatch_eMOF <- nw_occurrence_all %>%
   select(eventID = `Station Event ID`,
          occurrenceID = `Catch ID`,
@@ -336,7 +369,7 @@ NW2022_ind_eMOF <- nw_occurrence_specimen %>%
 Combine the two extended measurementOrFact extensions into a single eMOF extension, and save locally and in GoogleDrive:
 
 ``` {r}
-NW2022_eMOF <- dplyr::bind_rows(NW2022_trawl_allCatch_eMOF, NW2022_ind_eMOF)
+NW2022_eMOF <- dplyr::bind_rows(NW2022_rv, NW2022_samplingEffort, NW2022_trawl_allCatch_eMOF, NW2022_ind_eMOF)
 
 # Remove NA and replace with empty cells:
 NW2022_eMOF <- sapply(NW2022_eMOF, as.character)
