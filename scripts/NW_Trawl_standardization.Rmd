@@ -289,7 +289,7 @@ NW2022_samplingEffort <- event %>%
                values_to = "measurementValue") %>%
   mutate(measurementTypeID = case_when(
            measurementType == "Sampling_Duration_Minutes" ~ "http://vocab.nerc.ac.uk/collection/P01/current/AZDRZZ01/",
-           measurementType == "Haversine Distance" ~ " "),
+           measurementType == "Haversine Distance" ~ "https://vocab.nerc.ac.uk/collection/S05/current/S050247/"),
          measurementUnit = case_when(
            measurementType == "Sampling_Duration_Minutes" ~ "minutes",
            measurementType == "Haversine Distance" ~ "kilometers"),
