@@ -95,7 +95,10 @@ event_trawl <- event %>%
   distinct(eventID, .keep_all = TRUE) %>%
   mutate(geodeticDatum = "WGS84",
          datasetID = "https://doi.org/10.21966/shnm-s480",
-         bibliographicCitation = "Murphy, J., & Dimond, A. (2022). Trawl Data from the FV Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition [Data set]. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/shnm-s480")
+         bibliographicCitation = "Murphy, J., & Dimond, A. (2022). Trawl Data from the FV Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition [Data set]. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/shnm-s480",
+         language = "en",
+         modified = lubridate::today(),
+         license = "https://creativecommons.org/licenses/by/4.0/legalcode")
 
 # Save locally:
 write_csv(event_trawl, here("standardized_data", "NW2022_event.csv"))
@@ -289,7 +292,7 @@ NW2022_samplingEffort <- event %>%
                values_to = "measurementValue") %>%
   mutate(measurementTypeID = case_when(
            measurementType == "Sampling_Duration_Minutes" ~ "http://vocab.nerc.ac.uk/collection/P01/current/AZDRZZ01/",
-           measurementType == "Haversine Distance" ~ "https://vocab.nerc.ac.uk/collection/S05/current/S050247/"),
+           measurementType == "Haversine Distance" ~ "https://vocab.nerc.ac.uk/collection/P01/current/LENSMTRK/"),
          measurementUnit = case_when(
            measurementType == "Sampling_Duration_Minutes" ~ "minutes",
            measurementType == "Haversine Distance" ~ "kilometers"),
